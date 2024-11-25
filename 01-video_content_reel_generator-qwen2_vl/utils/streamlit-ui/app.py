@@ -14,6 +14,7 @@ import os
 import boto3
 import torch
 import sagemaker
+from sagemaker import serializers, deserializers
 import decord
 import requests
 
@@ -27,13 +28,19 @@ app_path = os.path.dirname(os.path.realpath(__file__))
 
 # model args
 video_llm_model_id = "Qwen/Qwen2-VL-7B-Instruct"
-local_vllm_url = "http://localhost:8080/invocations"
+endpoint_name = "qwen2vl-7b-instruct-endpoint"
 headers = {"Content-Type": "application/json"}
 
 st.set_page_config(page_title="vLLM with Qwen2-VL", page_icon="🤖")
 st.image(os.path.join(app_path, "banner-large.svg"), use_container_width=True) 
 st.title("🤖 SageMaker Multi-Modal Workshop ")
 
+pretrained_predictor = sagemaker.Predictor(
+    endpoint_name=endpoint_name,
+    sagemaker_session=sagemaker.Session(),
+    serializer=serializers.JSONSerializer(),
+    deserializer=deserializers.JSONDeserializer(),
+)
 
 conversation_history = [
     {
@@ -171,7 +178,6 @@ def encode_image(media):
 
 # Input for new message
 if prompt := st.chat_input(placeholder="Please ask me a question!"):
-    
     # Add user message to history
     st.session_state.messages.append({"type": "user", "content": prompt})
     st.chat_message("user").write(prompt)
@@ -196,21 +202,18 @@ if prompt := st.chat_input(placeholder="Please ask me a question!"):
 
     # Get assistant response
     with st.chat_message("assistant"):
-        response = requests.post(
-            local_vllm_url, 
-            headers=headers, 
-            json={
-                "messages": st.session_state.history,
-                "properties": {
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "max_tokens": max_tokens,
-                    "repetition_penalty": repetition_penalty,
-                    "stop_token_ids": []
-                }
+        payload = {
+            "messages": st.session_state.history,
+            "properties": {
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_tokens": max_tokens,
+                "repetition_penalty": repetition_penalty,
+                "stop_token_ids": []
             }
-        )
-        generated_text = response.json()["text"]
+        }
+        response = pretrained_predictor.predict(payload)
+        generated_text = response["text"]
         st.write(generated_text)
         # Add assistant response to history
         st.session_state.history.append({
