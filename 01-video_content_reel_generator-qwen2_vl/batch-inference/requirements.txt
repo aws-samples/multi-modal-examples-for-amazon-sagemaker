@@ -1,6 +1,0 @@
-git+https://github.com/huggingface/accelerate.git@v1.1.0
-ms-swift[llm]@git+https://github.com/modelscope/ms-swift.git@d13c431a0f337f6a04df2ce5310c5666b0c0c1f2
-git+https://github.com/huggingface/transformers@21fac7abba2a37fae86106f87fcf9974fd1e3830
-pyav
-qwen_vl_utils
-vllm>=0.6.1

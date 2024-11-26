@@ -1,3 +1,4 @@
+import numpy as np
 import streamlit as st
 from datetime import datetime
 import json
@@ -5,8 +6,8 @@ import re
 import copy
 import subprocess
 from typing import Dict, List
-from PIL import Image  # For handling images
-import decord  # For handling videos
+from PIL import Image  
+import decord
 import warnings
 import io
 import base64
@@ -14,7 +15,8 @@ import os
 import boto3
 import torch
 import sagemaker
-import decord
+from sagemaker import serializers, deserializers
+from decord import VideoReader, cpu
 import requests
 
 warnings.filterwarnings("ignore")
@@ -23,17 +25,24 @@ GLOBAL_TEMPERATURE = 0.1
 GLOBAL_TOP_P = 0.001
 REPTITION_PENALTY = 1.05
 MAX_TOKENS = 2048
+TOTAL_FRAMES = 8
 app_path = os.path.dirname(os.path.realpath(__file__))
 
 # model args
 video_llm_model_id = "Qwen/Qwen2-VL-7B-Instruct"
-local_vllm_url = "http://localhost:8080/invocations"
+endpoint_name = "qwen2vl-7b-instruct-endpoint"
 headers = {"Content-Type": "application/json"}
 
 st.set_page_config(page_title="vLLM with Qwen2-VL", page_icon="🤖")
 st.image(os.path.join(app_path, "banner-large.svg"), use_container_width=True) 
 st.title("🤖 SageMaker Multi-Modal Workshop ")
 
+pretrained_predictor = sagemaker.Predictor(
+    endpoint_name=endpoint_name,
+    sagemaker_session=sagemaker.Session(),
+    serializer=serializers.JSONSerializer(),
+    deserializer=deserializers.JSONDeserializer(),
+)
 
 conversation_history = [
     {
@@ -81,6 +90,15 @@ st.sidebar.subheader("Advanced Settings:")
 stop_words = st.sidebar.text_input(
     "Stop Token IDs",
     value="[]"
+)
+
+# Frequency Penalty Slider
+session_frames = st.sidebar.slider(
+    "Video Frames to Sub-Sample",
+    min_value=TOTAL_FRAMES,
+    max_value=12,
+    value=TOTAL_FRAMES,
+    step=1
 )
 
 # Frequency Penalty Slider
@@ -147,7 +165,7 @@ if st.session_state.media is not None and st.session_state.media_displayed:
     if isinstance(st.session_state.media, Image.Image):
         st.image(st.session_state.media, caption="Uploaded Image", use_container_width=True)
     else:
-        st.video(st.session_state.media, caption="Uploaded Video")
+        st.video(st.session_state.media)
 
 # Display chat messages from history without repeating media display
 avatars = {"user": "human", "assistant": "ai"}
@@ -155,8 +173,9 @@ for msg in st.session_state.messages:
     with st.chat_message(avatars[msg["type"]]):
         st.write(msg["content"])
 
+
 def encode_image(media):
-    
+    media = media.resize((300, 300), Image.Resampling.LANCZOS)
     buffered = io.BytesIO()
     media.save(buffered, format="PNG")
 
@@ -168,6 +187,7 @@ def encode_image(media):
     base64_str = f"data:image/png;base64,{encoded_image_text}"
 
     return base64_str
+
 
 # Input for new message
 if prompt := st.chat_input(placeholder="Please ask me a question!"):
@@ -186,6 +206,22 @@ if prompt := st.chat_input(placeholder="Please ask me a question!"):
                     {"type": "text", "text": prompt}
                 ]
             })
+        else:
+            _video_bytes = st.session_state.media
+            vr = VideoReader(io.BytesIO(_video_bytes), ctx=cpu(0))
+            total_frames = len(vr)
+            print("total_frames ===>", total_frames, "selecting: ", session_frames)
+            selected_frames = np.linspace(0, total_frames - 1, session_frames, dtype=int)
+            print("selected frames ===>", selected_frames)
+            video_frames = vr.get_batch(selected_frames).asnumpy()
+            video_base64_as_list = [encode_image(Image.fromarray(x)) for x in video_frames]
+            st.session_state.history.append({
+                "role": "user",
+                "content": [
+                    {"type": "video", "video": video_base64_as_list},
+                    {"type": "text", "text": prompt}
+                ]
+            })
     else:
         st.session_state.history.append({
             "role": "user",
@@ -196,21 +232,18 @@ if prompt := st.chat_input(placeholder="Please ask me a question!"):
 
     # Get assistant response
     with st.chat_message("assistant"):
-        response = requests.post(
-            local_vllm_url, 
-            headers=headers, 
-            json={
-                "messages": st.session_state.history,
-                "properties": {
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "max_tokens": max_tokens,
-                    "repetition_penalty": repetition_penalty,
-                    "stop_token_ids": []
-                }
+        payload = {
+            "messages": st.session_state.history,
+            "properties": {
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_tokens": max_tokens,
+                "repetition_penalty": repetition_penalty,
+                "stop_token_ids": []
             }
-        )
-        generated_text = response.json()["text"]
+        }
+        response = pretrained_predictor.predict(payload)
+        generated_text = response["text"]
         st.write(generated_text)
         # Add assistant response to history
         st.session_state.history.append({
