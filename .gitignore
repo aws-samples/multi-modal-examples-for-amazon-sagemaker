@@ -65,3 +65,4 @@ local_data/
 model/
 01-video_content_reel_generator-qwen2_vl/requirements.txt
 __pycache__
+*.mp4
