@@ -58,3 +58,10 @@ agents-and-function-calling/bedrock-agents/agent-blueprint-templates/cdk.out
 agents-and-function-calling/bedrock-agents/agent-blueprint-templates/.cdk.staging
 agents-and-function-calling/bedrock-agents/agent-blueprint-templates/.package-lock.json
 agents-and-function-calling/bedrock-agents/agent-blueprint-templates/yarn.lock
+
+# ignore fine-tuning folders
+config.yaml
+local_data/
+model/
+01-video_content_reel_generator-qwen2_vl/requirements.txt
+__pycache__
