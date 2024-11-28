@@ -24,7 +24,7 @@ warnings.filterwarnings("ignore")
 GLOBAL_TEMPERATURE = 0.1
 GLOBAL_TOP_P = 0.001
 REPTITION_PENALTY = 1.05
-MAX_TOKENS = 2048
+MAX_TOKENS = 8192
 TOTAL_FRAMES = 8
 app_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -218,7 +218,7 @@ if prompt := st.chat_input(placeholder="Please ask me a question!"):
             st.session_state.history.append({
                 "role": "user",
                 "content": [
-                    {"type": "video", "video": video_base64_as_list},
+                    {"type": "video", "video": video_base64_as_list, "fps": 1.0},
                     {"type": "text", "text": prompt}
                 ]
             })
