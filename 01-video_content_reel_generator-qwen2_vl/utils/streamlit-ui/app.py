@@ -1,23 +1,15 @@
 import numpy as np
 import streamlit as st
-from datetime import datetime
-import json
-import re
 import copy
-import subprocess
-from typing import Dict, List
-from PIL import Image  
-import decord
+from PIL import Image
 import warnings
 import io
 import base64
 import os
-import boto3
-import torch
 import sagemaker
 from sagemaker import serializers, deserializers
 from decord import VideoReader, cpu
-import requests
+
 
 warnings.filterwarnings("ignore")
 
@@ -25,7 +17,7 @@ GLOBAL_TEMPERATURE = 0.1
 GLOBAL_TOP_P = 0.001
 REPTITION_PENALTY = 1.05
 MAX_TOKENS = 8192
-TOTAL_FRAMES = 8
+TOTAL_FRAMES = 5
 app_path = os.path.dirname(os.path.realpath(__file__))
 
 # model args
@@ -96,7 +88,7 @@ stop_words = st.sidebar.text_input(
 session_frames = st.sidebar.slider(
     "Video Frames to Sub-Sample",
     min_value=TOTAL_FRAMES,
-    max_value=12,
+    max_value=8,
     value=TOTAL_FRAMES,
     step=1
 )
@@ -175,7 +167,7 @@ for msg in st.session_state.messages:
 
 
 def encode_image(media):
-    media = media.resize((300, 300), Image.Resampling.LANCZOS)
+    media = media.resize((128, 128), Image.Resampling.LANCZOS)
     buffered = io.BytesIO()
     media.save(buffered, format="PNG")
 
@@ -199,6 +191,7 @@ if prompt := st.chat_input(placeholder="Please ask me a question!"):
     if st.session_state.media is not None:
         if isinstance(st.session_state.media, Image.Image):
             base64_enc_str = encode_image(st.session_state.media)
+            st.session_state.media = None
             st.session_state.history.append({
                 "role": "user",
                 "content": [
@@ -208,6 +201,7 @@ if prompt := st.chat_input(placeholder="Please ask me a question!"):
             })
         else:
             _video_bytes = st.session_state.media
+            st.session_state.media = None
             vr = VideoReader(io.BytesIO(_video_bytes), ctx=cpu(0))
             total_frames = len(vr)
             print("total_frames ===>", total_frames, "selecting: ", session_frames)
