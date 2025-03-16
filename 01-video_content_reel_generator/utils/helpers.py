@@ -2,6 +2,12 @@ import os
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+import pandas as pd
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Union
 
 
 
@@ -43,45 +49,54 @@ def pretty_llm_print(prompt, title=None):
     console.print(distinct_panel)
 
 
-import os
-from datetime import datetime
 
-def find_latest_version_directory(directory_path):
+def find_latest_version_directory(directory_path: Union[str, Path]) -> str:
+    """
+    Finds the latest version directory using pathlib for cross-platform safety.
+    
+    Version directory format: vX-YYYYMMDD-HHMMSS
+    Where:
+    - X = version number (integer)
+    - YYYYMMDD = date of creation
+    - HHMMSS = time of creation
+    """
+    path = Path(directory_path) if isinstance(directory_path, str) else directory_path
     latest_dir = None
-    latest_version = None
+    latest_version = -1
     latest_timestamp = None
 
-    # Iterate through all items in the directory
-    for dir_name in os.listdir(directory_path):
-        # Check if directory starts with 'v'
-        if dir_name.startswith('v'):
+    for dir_entry in path.iterdir():
+        if dir_entry.is_dir() and dir_entry.name.startswith('v'):
             try:
-                # Split the directory name into version, date, and time components
-                version, date_str, time_str = dir_name.split('-')
-                # Convert version to a comparable format (omit 'v')
-                version_number = int(version[1:])
-                # Combine date and time strings
-                timestamp_str = f'{date_str} {time_str}'
-                # Convert to datetime object
-                timestamp = datetime.strptime(timestamp_str, '%Y%m%d %H%M%S')
+                # Split directory name into components
+                version_part, date_str, time_str = dir_entry.name.split('-', 2)
+                
+                # Extract version number
+                version_number = int(version_part[1:])  # Remove 'v' prefix
+                
+                # Parse datetime
+                timestamp = datetime.strptime(
+                    f"{date_str} {time_str}", 
+                    "%Y%m%d %H%M%S"
+                )
 
-                # Update latest version if this is the first or a newer version
-                if latest_version is None or version_number > latest_version:
+                # Update latest version
+                if (version_number > latest_version or 
+                    (version_number == latest_version and 
+                     timestamp > latest_timestamp)):
                     latest_version = version_number
                     latest_timestamp = timestamp
-                    latest_dir = dir_name
-                # If same version, compare timestamps
-                elif version_number == latest_version:
-                    if latest_timestamp is None or timestamp > latest_timestamp:
-                        latest_timestamp = timestamp
-                        latest_dir = dir_name
-            except ValueError:
-                continue  # Skip directories that don't match the format
+                    latest_dir = dir_entry.name
+                    
+            except (ValueError, IndexError):
+                continue  # Skip invalid format
 
-    return latest_dir
+    if not latest_dir:
+        raise FileNotFoundError(f"No valid version directories found in {path}")
+        
+    return str(latest_dir)
 
-import pandas as pd
-import json
+
 
 # Alternative version that reads the entire file if memory allows
 def find_best_model_checkpoint(file_path):
